@@ -1,0 +1,36 @@
+#!/bin/sh /etc/rc.common
+
+START=50
+
+start(){
+	if ps |grep "/usr/sbin"| grep "purplelily" | egrep -v grep >/dev/null
+	then
+    	echo "lily is started!"
+	else
+   	 echo start...
+		/usr/sbin/purplelily run &
+	fi
+}
+
+
+stop(){
+	killall purplelily
+}
+
+
+restart(){
+	stop
+	sleep 3
+	start
+}
+
+status(){
+	if ps |grep "/usr/sbin" | grep "purplelily" | egrep -v grep >/dev/null
+	then
+    	echo "lily is started!"
+	else
+   	 echo "lily is stop!"
+	fi
+}
+
+

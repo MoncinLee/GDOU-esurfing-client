@@ -1,0 +1,5 @@
+
+config login
+	option nasip '61.146.26.191'
+	option username 'zjlanhdxs123456jj'
+	option password 'HelloWorld'

@@ -1,0 +1,153 @@
+#! /bin/sh
+#兼容ash,bash,dash @_@
+config=/etc/config/lily
+
+geteth(){
+        eths=$(ifconfig |grep "Link encap"|awk '{print$1}')
+        for i in $eths
+        do
+                mac=$(ifconfig $i|grep "Link encap"|awk '{print$5}'|sed 's/:/-/g'|tr '[a-z]' '[A-Z]')
+                ip=$(ifconfig $i | grep "inet " | awk -F: '{print $2}' | awk '{print $1}')
+                ipindex=$(echo $ip|awk -F "." '{print $1}')
+                if test  "$ipindex" = "10"  ;then
+                        str=$(echo ${str}mac:$mac'|'ip:$ip' ' )
+                fi
+        done
+        echo $str
+
+}
+
+
+
+getTimestamp(){
+        current=`date "+%Y-%m-%d %H:%M:%S"`
+        timeStamp=`date -d "$current" +%s`520
+        echo $timeStamp
+}
+
+getmd5(){
+        str=$1
+        str=$(echo -n ${str}"Eshore!@#"|md5sum|awk '{print$1}'| tr '[a-z]' '[A-Z]')
+        echo $str
+}
+
+
+getnasip(){
+        echo 61.146.26.191
+}
+
+challenge(){
+        url="http://enet.10000.gd.cn:10001/client/challenge"
+        username=$1
+        clientip=$2
+        nasip=$3
+        mac=$4
+        timestamp=$(getTimestamp)
+        authenticator=$(getmd5 "${clientip}${nasip}${mac}${timestamp}")
+        postdata={'"username"':'"'$username'"','"clientip"':'"'$clientip'"','"nasip"':'"'$nasip'"','"mac"':'"'$mac'"','"timestamp"':'"'$timestamp'"','"authenticator"':'"'$authenticator'"'}
+        content=$(wget --header "X-Forwarded_For: ${clientip}" --post-data="$postdata" $url -q -O-)
+        echo $content|grep "challenge"|awk -F "," '{print$1}'|awk -F ":" '{print $2}'|sed 's/"//g'
+}
+
+login(){
+        url="http://enet.10000.gd.cn:10001/client/login"
+        username=$1
+        password=$2
+        clientip=$3
+        nasip=$4
+        mac=$5
+        code=$6
+        timestamp=$(getTimestamp)
+        iswifi=$7
+        authenticator=$(getmd5 "${clientip}${nasip}${mac}${timestamp}${code}")
+        postdata={'"username"':'"'$username'"','"password"':'"'$password'"','"clientip"':'"'$clientip'"','"nasip"':'"'$nasip'"','"mac"':'"'$mac'"','"timestamp"':'"'$timestamp'"','"authenticator"':'"'$authenticator'"','"iswifi"':'"'$iswifi'"'}
+        content=$(wget  --post-data="$postdata" $url -q -O-)
+	if [ $? -eq 0 ];then
+        echo $content
+	fi
+}
+
+
+
+active(){
+        username=$1
+        clientip=$2
+        nasip=$3
+        mac=$4
+        timestamp=$(getTimestamp)
+        authenticator=$(getmd5 "${clientip}${nasip}${mac}${timestamp}")
+        url="http://enet.10000.gd.cn:8001/hbservice/client/active?username=${username}&clientip=${clientip}&nasip=${nasip}&mac=${mac}&timestamp=${timestamp}&authenticator=${authenticator}"
+        content=$(wget $url -q -O-)
+        echo $content|awk -F "," '{print$1}'|awk -F ":" '{print$2}'|sed 's/"//g'
+
+}
+
+run(){
+        username=$(cat $config |grep "username"|awk '{print$3}'|sed 's/'"'"/'/g' )
+        password=$(cat $config |grep "password"|awk '{print$3}'|sed 's/'"'"/'/g' )
+        nasip=$(cat $config |grep "nasip"|awk '{print$3}'|sed 's/'"'"/'/g' )
+	enable=$(cat $config |grep "enable"|awk '{print$3}'|sed 's/'"'"/'/g')
+	phone=$(cat $config |grep "phone"|awk '{print$3}'|sed 's/'"'"/'/g')
+	iswifi=1050
+if test "$phone" = "1" ;then 
+	iswifi=4060
+fi
+if test "$enable" = "1" ;then  
+while :
+do
+        host=enet.10000.gd.cn
+        ping -c2 $host >>/dev/null
+        if [ $? -eq 0 ];then
+		echo network is ok
+                eths=$(geteth)
+                for eth in $eths
+                do
+                        mac=$(echo $eth|awk -F "|" '{print$1}'|awk -F ":" '{print $2}')
+                        ip=$(echo $eth|awk -F "|" '{print$2}'|awk -F ":" '{print $2}')
+                        rescode=$(active $username $ip $nasip $mac)
+                        if [ $rescode -eq 0 ];then
+                                sleep 5
+                        else
+                                break
+                        fi
+                done
+                if [ $rescode -ne 0 ];then
+                        loginStr=''
+                        for eth in $eths
+                        do
+                        mac=$(echo $eth|awk -F "|" '{print$1}'|awk -F ":" '{print $2}')
+                        ip=$(echo $eth|awk -F "|" '{print$2}'|awk -F ":" '{print $2}')
+                        code=$(challenge $username $ip $nasip $mac)
+                        loginStr=$(echo ${loginStr}mac:$mac'|'ip:$ip'|'code:${code}' ' )
+                        done
+                        for loginstr in $loginStr
+                        do
+                        {
+                                mac=$(echo $loginstr|awk -F "|" '{print$1}'|awk -F ":" '{print $2}')
+                                ip=$(echo $loginstr|awk -F "|" '{print$2}'|awk -F ":" '{print $2}')
+                                code=$(echo $loginstr|awk -F "|" '{print$3}'|awk -F ":" '{print $2}')
+                                login $username $password $ip $nasip $mac $code $iswifi
+                        }&
+                        done
+                        wait
+                fi
+
+
+
+        else
+                sleep 3
+        fi
+
+done
+fi
+}
+
+case "$1" in
+    'run')
+        run
+        ;;
+    *)
+    echo "usage: $0 run"
+    exit 1
+        ;;
+    esac

@@ -1,0 +1,1 @@
+适用于OpenWrt平台的广东海洋大学电信天翼客户端，感谢[mynuolr](https://github.com/GDCTSCP/GDCTSCP)贡献Python版和不知名的大神贡献的Shell Script版。
